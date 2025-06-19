@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   ReactNode,
 } from 'react';
 import useSWR from 'swr';
@@ -19,8 +20,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// 🌐 Broadcast channel for cross-tab login/logout sync
 const authChannel = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
 
 const fetcher = async (url: string) => {
@@ -47,7 +46,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     revalidateOnFocus: true,
   });
 
-  // 🔁 Manual session refresh
   const refreshSession = () => {
     mutate();
   };
@@ -61,12 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res.ok) throw new Error('Logout failed');
 
-      mutate(null, false); // remove user
+      mutate(null, false);
       toast.success('You have been logged out');
-
-      // 📣 Notify other tabs
       authChannel?.postMessage('logout');
-
       router.push('/auth/login');
     } catch (err) {
       console.error('[Logout]', err);
@@ -74,14 +69,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 🔄 Listen for other tab logout/login
-  if (typeof window !== 'undefined' && authChannel) {
-    authChannel.onmessage = (event) => {
-      if (event.data === 'logout' || event.data === 'login') {
-        mutate(); // refetch session in this tab
-      }
-    };
-  }
+  useEffect(() => {
+    if (typeof window !== 'undefined' && authChannel) {
+      authChannel.onmessage = (event) => {
+        if (event.data === 'logout' || event.data === 'login') {
+          mutate();
+        }
+      };
+    }
+  }, []);
 
   return (
     <AuthContext.Provider

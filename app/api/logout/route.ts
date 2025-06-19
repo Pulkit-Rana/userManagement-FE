@@ -7,26 +7,21 @@ export async function POST(req: NextRequest) {
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        // ✅ Forward cookies
         Cookie: req.headers.get('cookie') || '',
-        // ✅ Forward access token so backend can extract username
         Authorization: req.headers.get('authorization') || '',
       },
     });
 
+    const setCookie = backendRes.headers.get('set-cookie');
     const response = NextResponse.json({}, { status: backendRes.status });
 
-    // ✅ Forward Set-Cookie to expire refresh token
-    const setCookie = backendRes.headers.get('set-cookie');
     if (setCookie) {
       response.headers.set('set-cookie', setCookie);
     }
 
     return response;
   } catch (err) {
-    return NextResponse.json(
-      { message: 'Logout failed' },
-      { status: 500 }
-    );
+    console.error('[LOGOUT ERROR]', err);
+    return NextResponse.json({ message: 'Logout failed' }, { status: 500 });
   }
 }

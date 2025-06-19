@@ -4,12 +4,16 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { handleApiError } from '@/app/lib/utils/errorHandler';
+import { useAuth } from '@/app/context/AuthContext';
+
+const authChannel = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
 
 export function useLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refreshSession } = useAuth();
 
   const login = async (email: string, password: string) => {
     setLoading(true);
@@ -21,7 +25,7 @@ export function useLogin() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          username: email, // ✅ Must match Spring Boot DTO
+          username: email,
           password,
         }),
       });
@@ -32,8 +36,10 @@ export function useLogin() {
       }
 
       toast.success('Login successful');
+      await refreshSession();
+      authChannel?.postMessage('login');
 
-      const from = searchParams.get('from') || '/dashboard'; // ✅ Smart redirect
+      const from = searchParams.get('from') || '/dashboard';
       router.replace(from);
     } catch (err) {
       const msg = handleApiError(err, 'Login failed');

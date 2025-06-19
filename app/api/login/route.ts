@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       cache: 'no-store',
     });
 
+    const setCookieHeader = backendRes.headers.get('set-cookie');
     const data = await backendRes.json();
 
     if (!backendRes.ok) {
@@ -21,10 +22,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { accessToken, user, expiresIn, tokenType } = data;
-    const setCookieHeader = backendRes.headers.get('set-cookie');
+    const { user, expiresIn, tokenType } = data;
 
-    const response = NextResponse.json({ accessToken, user, expiresIn, tokenType });
+    const response = NextResponse.json({ user, expiresIn, tokenType });
 
     if (setCookieHeader) {
       response.headers.set('set-cookie', setCookieHeader);

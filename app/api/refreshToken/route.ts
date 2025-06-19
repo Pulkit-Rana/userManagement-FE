@@ -8,11 +8,15 @@ export async function POST(req: NextRequest) {
       cache: 'no-store',
     });
 
+    const setCookie = backendRes.headers.get('set-cookie');
     const data = await backendRes.json();
+
+    if (!backendRes.ok) {
+      return NextResponse.json({ message: data?.message || 'Refresh failed' }, { status: backendRes.status });
+    }
 
     const response = NextResponse.json(data, { status: backendRes.status });
 
-    const setCookie = backendRes.headers.get('set-cookie');
     if (setCookie) {
       response.headers.set('set-cookie', setCookie);
     }
