@@ -3,51 +3,54 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
   ReactNode,
 } from 'react';
+import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { User } from '@/app/lib/types/auth';
+import { User, UserSchema } from '@/app/lib/types/auth';
 import { handleApiError } from '@/app/lib/utils/errorHandler';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   logout: () => Promise<void>;
+  refreshSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// 🌐 Broadcast channel for cross-tab login/logout sync
+const authChannel = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
+
+const fetcher = async (url: string) => {
+  const res = await fetch(url, {
+    method: 'GET',
+    credentials: 'include',
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error('Session expired or unauthorized');
+  const data = await res.json();
+  return UserSchema.parse(data);
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch('/api/user', {
-          method: 'GET',
-          credentials: 'include',
-          cache: 'no-store',
-        });
+  const {
+    data: user,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<User | null>('/api/user', fetcher, {
+    shouldRetryOnError: false,
+    revalidateOnFocus: true,
+  });
 
-        if (!res.ok) throw new Error('Session expired or unauthorized');
-        const data: User = await res.json();
-        setUser(data);
-      } catch (err) {
-        console.error('[AuthContext] session fetch failed:', err);
-        toast.error(handleApiError(err, 'Could not restore session'));
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, []);
+  // 🔁 Manual session refresh
+  const refreshSession = () => {
+    mutate();
+  };
 
   const logout = async () => {
     try {
@@ -58,8 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res.ok) throw new Error('Logout failed');
 
-      setUser(null); // 🧼 Ensure it's cleared before redirect
+      mutate(null, false); // remove user
       toast.success('You have been logged out');
+
+      // 📣 Notify other tabs
+      authChannel?.postMessage('logout');
+
       router.push('/auth/login');
     } catch (err) {
       console.error('[Logout]', err);
@@ -67,10 +74,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  if (isLoading) return null;
+  // 🔄 Listen for other tab logout/login
+  if (typeof window !== 'undefined' && authChannel) {
+    authChannel.onmessage = (event) => {
+      if (event.data === 'logout' || event.data === 'login') {
+        mutate(); // refetch session in this tab
+      }
+    };
+  }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, logout }}>
+    <AuthContext.Provider
+      value={{
+        user: user || null,
+        isLoading,
+        logout,
+        refreshSession,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
