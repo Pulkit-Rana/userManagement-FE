@@ -1,102 +1,92 @@
+// File: /app/context/AuthContext.tsx
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  ReactNode,
-} from 'react';
-import useSWR from 'swr';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import { User, UserSchema } from '@/app/lib/types/auth';
-import { handleApiError } from '@/app/lib/utils/errorHandler';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { BroadcastChannel } from 'broadcast-channel';
+import apiClient from '@/app/lib/apiClient';
+import type { LoginResponse } from '@/app/lib/schemas/auth-schemas';
 
 interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
+  accessToken: string | null;
+  user: LoginResponse['user'] | null;
+  login: (token: string, userData: LoginResponse['user']) => void;
   logout: () => Promise<void>;
-  refreshSession: () => void;
+  refresh: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const authChannel = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url, {
-    method: 'GET',
-    credentials: 'include',
-    cache: 'no-store',
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('accessToken');
   });
-  if (!res.ok) throw new Error('Session expired or unauthorized');
-  const data = await res.json();
-  return UserSchema.parse(data);
-};
+  const [user, setUser] = useState<LoginResponse['user'] | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const router = useRouter();
+  const bc = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
 
-  const {
-    data: user,
-    error,
-    isLoading,
-    mutate,
-  } = useSWR<User | null>('/api/user', fetcher, {
-    shouldRetryOnError: false,
-    revalidateOnFocus: true,
-  });
+  useEffect(() => {
+    if (accessToken) {
+      sessionStorage.setItem('accessToken', accessToken);
+      apiClient.get('/user')
+        .then((res) => setUser(res.data))
+        .catch(() => setUser(null));
+    } else {
+      sessionStorage.removeItem('accessToken');
+      setUser(null);
+    }
+  }, [accessToken]);
 
-  const refreshSession = () => {
-    mutate();
+  useEffect(() => {
+    if (!bc) return;
+    bc.onmessage = (msg) => {
+      if (msg === 'logout') {
+        setAccessToken(null);
+      }
+      if (typeof msg === 'string' && msg.startsWith('login:')) {
+        const [, token] = msg.split(':');
+        setAccessToken(token);
+      }
+    };
+    return () => {
+      bc.close();
+    };
+  }, [bc]);
+
+  const login = (token: string, userData: LoginResponse['user']) => {
+    setAccessToken(token);
+    setUser(userData);
+    bc?.postMessage(`login:${token}`);
   };
 
   const logout = async () => {
+    await apiClient.post('/auth/logout');
+    setAccessToken(null);
+    setUser(null);
+    bc?.postMessage('logout');
+  };
+
+  const refresh = async (): Promise<string | null> => {
     try {
-      const res = await fetch('/api/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (!res.ok) throw new Error('Logout failed');
-
-      mutate(null, false);
-      toast.success('You have been logged out');
-      authChannel?.postMessage('logout');
-      router.push('/auth/login');
-    } catch (err) {
-      console.error('[Logout]', err);
-      toast.error(handleApiError(err, 'Logout failed'));
+      const res = await apiClient.post('/auth/refresh');
+      const { accessToken: newToken } = res.data;
+      setAccessToken(newToken);
+      return newToken;
+    } catch {
+      await logout();
+      return null;
     }
   };
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && authChannel) {
-      authChannel.onmessage = (event) => {
-        if (event.data === 'logout' || event.data === 'login') {
-          mutate();
-        }
-      };
-    }
-  }, []);
-
   return (
-    <AuthContext.Provider
-      value={{
-        user: user || null,
-        isLoading,
-        logout,
-        refreshSession,
-      }}
-    >
+    <AuthContext.Provider value={{ accessToken, user, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
+export const useAuth = (): AuthContextType => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+};

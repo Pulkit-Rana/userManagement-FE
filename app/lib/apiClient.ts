@@ -1,28 +1,26 @@
-// lib/apiClient.ts
-export async function apiFetch<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const headers = new Headers(options.headers || {});
+// File: /app/lib/apiClient.ts
+import axios from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 
-  // 🧼 Never set Authorization manually (no token in memory)
-  // Cookies (HttpOnly) will be sent automatically
+const apiClient = axios.create({
+  baseURL: '/api',
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: 'include',
-    cache: 'no-store',
-  });
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (typeof window !== 'undefined') {
+      const token = sessionStorage.getItem('accessToken');
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-  let errorBody: any = {};
-  try {
-    errorBody = await response.clone().json();
-  } catch (_) {}
-
-  if (!response.ok) {
-    throw new Error(errorBody.message || 'API Error');
-  }
-
-  return response.json() as Promise<T>;
-}
+export default apiClient;

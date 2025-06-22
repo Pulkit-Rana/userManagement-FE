@@ -1,7 +1,13 @@
+'use client';
 
-
-import { Suspense } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/ui/components/card';
+import React, { Suspense } from 'react';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/app/ui/components/card';
 import LoginForm from '@/app/ui/login-form';
 
 export default function LoginPage() {
