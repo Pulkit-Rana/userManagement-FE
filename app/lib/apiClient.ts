@@ -1,4 +1,3 @@
-// File: /app/lib/apiClient.ts
 import axios from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
 

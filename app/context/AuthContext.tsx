@@ -1,9 +1,9 @@
-// File: /app/context/AuthContext.tsx
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { BroadcastChannel } from 'broadcast-channel';
-import apiClient from '@/app/lib/apiClient';
+import axios from 'axios';
+import { useRouter } from 'next/navigation';
 import type { LoginResponse } from '@/app/lib/schemas/auth-schemas';
 
 interface AuthContextType {
@@ -17,18 +17,26 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [accessToken, setAccessToken] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('accessToken');
-  });
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<LoginResponse['user'] | null>(null);
+  const router = useRouter();
 
   const bc = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const token = sessionStorage.getItem('accessToken');
+      if (token) setAccessToken(token);
+    }
+  }, []);
+
+  useEffect(() => {
     if (accessToken) {
       sessionStorage.setItem('accessToken', accessToken);
-      apiClient.get('/user')
+      axios
+        .get('/api/auth/user', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
         .then((res) => setUser(res.data))
         .catch(() => setUser(null));
     } else {
@@ -60,18 +68,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await apiClient.post('/auth/logout');
-    setAccessToken(null);
-    setUser(null);
-    bc?.postMessage('logout');
+    try {
+      await axios.post('/api/auth/logout', {}, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+      bc?.postMessage('logout');
+      router.push('/auth/login');
+    }
   };
 
   const refresh = async (): Promise<string | null> => {
     try {
-      const res = await apiClient.post('/auth/refresh');
-      const { accessToken: newToken } = res.data;
-      setAccessToken(newToken);
-      return newToken;
+      const res = await axios.post('/api/auth/refresh');
+      const data = res.data as { accessToken: string; refreshToken?: string };
+      setAccessToken(data.accessToken);
+      return data.accessToken;
     } catch {
       await logout();
       return null;

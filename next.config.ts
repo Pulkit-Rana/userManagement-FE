@@ -1,15 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    appDir: true,
-    middleware: true,
-  },
-  // Optional: central middleware matcher to protect all routes except login and auth APIs
-  middleware: [
-    {
-      source: '/((?!api/auth/login|api/auth/refresh|api/auth/logout|_next/static|_next/image|favicon.ico).*)',
-    },
-  ],
+  // any other valid options you are using
 };
-module.exports = nextConfig;
+
+export default nextConfig;

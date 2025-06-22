@@ -1,21 +1,32 @@
 // File: /middleware.ts
 import { NextResponse, type NextRequest } from 'next/server';
-import type { RefreshResponse } from '@/app/lib/schemas/auth-schemas';
 import { jwtVerify } from 'jose';
+import type { RefreshResponse } from '@/app/lib/schemas/auth-schemas';
 
-const PUBLIC_PATHS = ['/', '/login', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/_next'];
+const PUBLIC_PATHS = [
+  '/',
+  '/auth/login',                    // ✅ Correct login path
+  '/api/auth/login',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+  '/_next',
+];
+
 const SECRET = process.env.JWT_SECRET;
 
 async function attemptRefresh(req: NextRequest, retries = 0): Promise<NextResponse | null> {
   try {
     const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { cookie: req.headers.get('cookie') || '' },
+      headers: {
+        cookie: req.headers.get('cookie') || '',
+      },
       credentials: 'include',
     });
-    if (!refreshRes.ok) throw new Error('Refresh failed');
 
+    if (!refreshRes.ok) throw new Error('Refresh failed');
     const data = (await refreshRes.json()) as RefreshResponse;
+
     const res = NextResponse.next();
     res.headers.set('authorization', `Bearer ${data.accessToken}`);
     return res;
@@ -32,9 +43,10 @@ async function attemptRefresh(req: NextRequest, retries = 0): Promise<NextRespon
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(path))) {
-    return NextResponse.next();
-  }
+  const isPublic = PUBLIC_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(path)
+  );
+  if (isPublic) return NextResponse.next();
 
   const token = request.headers.get('authorization')?.split(' ')[1];
   if (token) {
@@ -47,7 +59,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const loginUrl = new URL('/login', request.url);
+  const loginUrl = new URL('/auth/login', request.url); // ✅ fixed redirect path
   return NextResponse.redirect(loginUrl);
 }
 

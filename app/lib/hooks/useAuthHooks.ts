@@ -50,7 +50,7 @@ export function useLogout() {
     setIsLoggingOut(true);
     await logout();
     toast('Logged out successfully');
-    router.replace('/login');
+    router.replace('/auth/login');
     setIsLoggingOut(false);
   }
 
