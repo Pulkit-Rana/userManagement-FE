@@ -1,15 +1,16 @@
-// File: /middleware.ts
+// middleware.ts
 import { NextResponse, type NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
 import type { RefreshResponse } from '@/app/lib/schemas/auth-schemas';
+import { jwtVerify } from 'jose';
 
 const PUBLIC_PATHS = [
   '/',
-  '/auth/login',                    // ✅ Correct login path
+  '/login',
+  '/auth/login',
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/logout',
-  '/_next',
+  '/_next'
 ];
 
 const SECRET = process.env.JWT_SECRET;
@@ -19,16 +20,28 @@ async function attemptRefresh(req: NextRequest, retries = 0): Promise<NextRespon
     const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
       headers: {
-        cookie: req.headers.get('cookie') || '',
+        cookie: req.headers.get('cookie') || '', // include refreshToken cookie
       },
       credentials: 'include',
     });
 
     if (!refreshRes.ok) throw new Error('Refresh failed');
-    const data = (await refreshRes.json()) as RefreshResponse;
 
+    const data = (await refreshRes.json()) as RefreshResponse;
     const res = NextResponse.next();
     res.headers.set('authorization', `Bearer ${data.accessToken}`);
+
+    // 💡 Ensure refreshed cookie is set again!
+    if (data.refreshToken) {
+      res.cookies.set('refreshToken', data.refreshToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60,
+      });
+    }
+
     return res;
   } catch {
     if (retries < 3) {
@@ -43,12 +56,12 @@ async function attemptRefresh(req: NextRequest, retries = 0): Promise<NextRespon
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isPublic = PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(path)
-  );
-  if (isPublic) return NextResponse.next();
+  if (PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
 
   const token = request.headers.get('authorization')?.split(' ')[1];
+
   if (token) {
     try {
       await jwtVerify(token, new TextEncoder().encode(SECRET));
@@ -59,7 +72,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const loginUrl = new URL('/auth/login', request.url); // ✅ fixed redirect path
+  const loginUrl = new URL('/auth/login', request.url);
   return NextResponse.redirect(loginUrl);
 }
 

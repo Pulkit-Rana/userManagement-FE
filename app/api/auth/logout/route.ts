@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.redirect(new URL('/auth/login', request.url), 302);
     response.cookies.set('refreshToken', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'lax',
       path: '/',
       maxAge: 0,

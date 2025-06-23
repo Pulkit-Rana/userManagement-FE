@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     if (parsed.refreshToken) {
       response.cookies.set('refreshToken', parsed.refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: false,
         sameSite: 'lax',
         path: '/',
         maxAge: 7 * 24 * 60 * 60,
