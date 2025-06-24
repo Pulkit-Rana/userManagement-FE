@@ -14,7 +14,7 @@ const PUBLIC_PATHS = [
 ];
 
 // Secret को Edge Runtime से निकालने के लिए runtime change
-const SECRET = process.env.JWT_SECRET!;
+const SECRET = process.env.NEXT_PUBLIC_JWT_SECRET!;
 if (!SECRET) {
   throw new Error('⚠️ JWT_SECRET environment variable is not defined');
 }
