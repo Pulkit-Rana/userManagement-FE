@@ -1,4 +1,3 @@
-// File: /app/api/auth/login/route.ts
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { LoginResponseSchema } from '@/app/lib/schemas/auth-schemas';
@@ -11,30 +10,25 @@ const LoginRequestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { username, password } = LoginRequestSchema.parse(body);
+    // 1) backend कॉल
+    const backendRes = await fetch(
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`,
+      { method: 'POST', headers:{'Content-Type':'application/json'}, body: await request.text(), credentials:'include' }
+    );
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-      credentials: 'include',
-    });
-
-    if (!res.ok) throw new Error('Invalid credentials');
-    const data = await res.json();
+    // 2) JSON पढ़ो
+    const data = await backendRes.json();
     const parsed = LoginResponseSchema.parse(data);
 
-    const response = NextResponse.json(parsed, { status: 200 });
-    if (parsed.refreshToken) {
-      response.cookies.set('refreshToken', parsed.refreshToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60,
-      });
+    // 3) Next.js response बनाएँ
+    const response = NextResponse.json(parsed);
+
+    // 4) अगर backend ने Set-Cookie भेजी है, उसे आगे भेज दो
+    const setCookie = backendRes.headers.get('set-cookie');
+    if (setCookie) {
+      response.headers.set('set-cookie', setCookie);
     }
+
     return response;
   } catch (error: any) {
     return handleError(error);

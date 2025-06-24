@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { BroadcastChannel } from 'broadcast-channel';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<LoginResponse['user'] | null>(null);
+  // ✅ ADD THESE NEW STATE VARIABLES:
+  const [lastActivity, setLastActivity] = useState<number>(Date.now());
+  const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  
   const router = useRouter();
 
   const bc = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
@@ -61,6 +65,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [bc]);
 
+  // ✅ ADD THIS NEW useEffect HERE (AFTER ALL EXISTING useEffects):
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const updateActivity = () => setLastActivity(Date.now());
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    
+    events.forEach(event => {
+      document.addEventListener(event, updateActivity, true);
+    });
+
+    // Check inactivity every minute
+    const inactivityInterval = setInterval(() => {
+      if (Date.now() - lastActivity > INACTIVITY_TIMEOUT) {
+        logout();
+      }
+    }, 60 * 1000);
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, updateActivity, true);
+      });
+      clearInterval(inactivityInterval);
+    };
+  }, [accessToken, lastActivity]);
+
   const login = (token: string, userData: LoginResponse['user']) => {
     setAccessToken(token);
     setUser(userData);
@@ -80,11 +110,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ✅ REPLACE THIS REFRESH FUNCTION:
   const refresh = async (): Promise<string | null> => {
     try {
       const res = await axios.post('/api/auth/refresh');
       const data = res.data as { accessToken: string; refreshToken?: string };
       setAccessToken(data.accessToken);
+      setLastActivity(Date.now()); // Update activity on refresh
       return data.accessToken;
     } catch {
       await logout();

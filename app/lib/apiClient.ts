@@ -1,5 +1,4 @@
 import axios from 'axios';
-import type { InternalAxiosRequestConfig } from 'axios';
 
 const apiClient = axios.create({
   baseURL: '/api',
@@ -10,7 +9,7 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  (config) => {
     if (typeof window !== 'undefined') {
       const token = sessionStorage.getItem('accessToken');
       if (token && config.headers) {
@@ -20,6 +19,40 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshResponse = await axios.post('/api/auth/refresh');
+        const { accessToken } = refreshResponse.data;
+        
+        // Update sessionStorage
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('accessToken', accessToken);
+        }
+        
+        // Retry original request with new token
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed - redirect to login
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('accessToken');
+          window.location.href = '/auth/login';
+        }
+        return Promise.reject(refreshError);
+      }
+    }
+    
+    return Promise.reject(error);
+  }
 );
 
 export default apiClient;

@@ -18,7 +18,8 @@ export function useLogin() {
       const { email, ...rest } = values;
       const payload = { username: email, ...rest };
       const res = await apiClient.post('/auth/login', payload, {
-        headers: { 'Cache-Control': 'no-store' },
+        withCredentials: true, // ensure cookie set on login
+        headers: { 'Cache-Control': 'no-store' }
       });
       const { accessToken, user } = res.data;
       login(accessToken, user);
@@ -26,10 +27,9 @@ export function useLogin() {
       router.replace('/dashboard');
     } catch (err: any) {
       const raw = err.response?.data?.error;
-      const msg =
-        typeof raw === 'string'
-          ? raw
-          : Array.isArray(raw) && raw[0]?.message
+      const msg = typeof raw === 'string'
+        ? raw
+        : Array.isArray(raw) && raw[0]?.message
           ? raw[0].message
           : 'Login failed';
       toast.error(msg);
