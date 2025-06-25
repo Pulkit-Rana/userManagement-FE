@@ -7,12 +7,9 @@ export async function POST(request: NextRequest) {
     const refreshToken = request.cookies.get('refreshToken')?.value;
     const authHeader = request.headers.get('authorization');
 
-    console.log('🔍 Refresh Token Check:', {
-      hasToken: !!refreshToken,
-      tokenLength: refreshToken?.length
-    });
-
-    if (!refreshToken) throw new Error('No refresh token found in cookies');
+    if (!refreshToken || refreshToken.trim() === '') {
+      throw new Error('No valid refresh token found');
+    }
 
     const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/refreshToken`, {
       method: 'POST',
@@ -24,36 +21,24 @@ export async function POST(request: NextRequest) {
       credentials: 'include',
     });
 
-    if (!res.ok) throw new Error('Refresh failed');
+    if (!res.ok) throw new Error('Refresh token rejected by backend');
 
     const data = await res.json();
     const parsed = RefreshResponseSchema.parse(data);
-    
-    console.log('🔍 Refresh Backend Response:', {
-      hasNewRefreshToken: !!parsed.refreshToken,
-      hasAccessToken: !!parsed.accessToken
-    });
-
     const response = NextResponse.json(parsed);
 
-    // 🔧 FIX: More robust cookie setting for refresh
     if (parsed.refreshToken && parsed.refreshToken.trim() !== '') {
-      console.log('✅ Setting NEW refreshToken cookie');
-      
       response.cookies.set('refreshToken', parsed.refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
         sameSite: 'strict',
         path: '/',
-        maxAge: 7 * 24 * 60 * 60,
+        maxAge: 60 * 60 * 48, // 48 hours
       });
-    } else {
-      console.log('⚠️ No new refreshToken in refresh response');
     }
 
     return response;
   } catch (err: any) {
-    console.log('🚨 Refresh API Error:', err.message);
     return handleError(err);
   }
 }

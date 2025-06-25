@@ -1,22 +1,24 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import SideNav from '@/app/ui/dashboard/sidenav';
-import UserProfile from '@/app/ui/dashboard/user-profile'; // ✅ Import the profile component
+import UserProfile from '@/app/ui/dashboard/user-profile';
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const { accessToken } = useAuth();
-  const router = useRouter();
+  const { accessToken, refresh } = useAuth();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!accessToken) {
-      router.replace('/auth/login');
-    }
-  }, [accessToken]);
+    (async () => {
+      if (!accessToken) {
+        await refresh(); // silent refresh if needed
+      }
+      setReady(true);
+    })();
+  }, []);
 
-  if (!accessToken) return null;
+  if (!ready) return null; // Or show loading spinner if you want
 
   return (
     <div className="flex h-screen flex-col">
