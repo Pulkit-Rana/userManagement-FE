@@ -5,20 +5,13 @@ import { z } from "zod";
 export const ProfileSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
-  phoneNumber: z.string().nullable(),
-  address: z.string().nullable(),
-  city: z.string().nullable(),
-  country: z.string().nullable(),
-  zipCode: z.string().nullable(),
   profilePictureUrl: z.string().url(),
-  lastLoginDate: z.string().optional().nullable(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 
 // --- User (returned in login + GET /users/me) ---
 export const UserSchema = z.object({
   id: z.string().uuid(),
-  username: z.string().email(), // maps to 'email' field on frontend form
   roles: z.array(z.enum(["ADMIN", "USER"])),
   profile: ProfileSchema,
 });

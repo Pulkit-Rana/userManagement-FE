@@ -21,22 +21,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<LoginResponse['user'] | null>(null);
-  const [lastActivity, setLastActivity] = useState<number>(Date.now());
+  const [lastActivity, setLastActivity] = useState(Date.now());
   const router = useRouter();
   const bc = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
 
   const INACTIVITY_TIMEOUT = 1000 * 60 * 60 * 48; // 48 hours
 
-  // Load token from sessionStorage on boot
+  // On mount: load or try silent refresh
   useEffect(() => {
     const token = sessionStorage.getItem('accessToken');
     if (token) {
       setAccessToken(token);
       setApiClientToken(token);
+    } else {
+      // अगर पहले से कोई token नहीं है, तो cookie से नया लें
+      refresh();
     }
   }, []);
 
-  // Update user when token changes
+  // जब accessToken बदलें, तब user फ़ेच करें
   useEffect(() => {
     if (accessToken) {
       sessionStorage.setItem('accessToken', accessToken);
@@ -46,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           headers: { Authorization: `Bearer ${accessToken}` },
           withCredentials: true,
         })
-        .then((res) => setUser(res.data))
+        .then(res => setUser(res.data))
         .catch(() => setUser(null));
     } else {
       sessionStorage.removeItem('accessToken');
@@ -54,10 +57,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [accessToken]);
 
-  // BroadcastChannel login/logout sync
+  // BroadcastChannel for multi-tab sync
   useEffect(() => {
     if (!bc) return;
-    bc.onmessage = (msg) => {
+    bc.onmessage = msg => {
       if (msg === 'logout') {
         sessionStorage.removeItem('accessToken');
         setAccessToken(null);
@@ -70,41 +73,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setApiClientToken(token);
       }
     };
-    return () => {
-      bc.close();
-    };
+    return () => { bc.close(); };
   }, [bc]);
 
-  // 48h inactivity logout
+  // 48h inactivity logout (check every minute)
   useEffect(() => {
     if (!accessToken) return;
-
     const updateActivity = () => setLastActivity(Date.now());
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    events.forEach((event) =>
-      document.addEventListener(event, updateActivity, true)
-    );
+    const events = ['mousedown','mousemove','keypress','scroll','touchstart'];
+    events.forEach(e => document.addEventListener(e, updateActivity, true));
 
     const interval = setInterval(() => {
       if (Date.now() - lastActivity > INACTIVITY_TIMEOUT) {
         logout();
       }
-    }, 60 * 60*48);
+    }, 1000 * 60);
 
     return () => {
-      events.forEach((event) =>
-        document.removeEventListener(event, updateActivity, true)
-      );
+      events.forEach(e => document.removeEventListener(e, updateActivity, true));
       clearInterval(interval);
     };
   }, [accessToken, lastActivity]);
 
   // Auto-refresh every 14 minutes
   useEffect(() => {
-    const interval = setInterval(() => {
-      refresh();
-    }, 1000 * 60 * 14);
-    return () => clearInterval(interval);
+    const iv = setInterval(() => { refresh(); }, 1000 * 60 * 14);
+    return () => clearInterval(iv);
   }, []);
 
   const login = (token: string, userData: LoginResponse['user']) => {
@@ -121,20 +115,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         withCredentials: true,
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-    } catch {
-      // ignore
-    } finally {
+    } catch { /* ignore */ }
+    finally {
       sessionStorage.removeItem('accessToken');
       setAccessToken(null);
       setUser(null);
       setApiClientToken(null);
       bc?.postMessage('logout');
-
-      flushSync(() => {}); // ⏱ ensure React state updates before redirect
-
-      setTimeout(() => {
-        router.push('/auth/login');
-      }, 0);
+      flushSync(() => {}); 
+      router.push('/auth/login');
     }
   };
 

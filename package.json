@@ -21,6 +21,7 @@
     "cookie": "^1.0.2",
     "iron-session": "^8.0.4",
     "jose": "^6.0.11",
+    "jwt-decode": "^4.0.0",
     "lucide-react": "^0.515.0",
     "next": "15.3.3",
     "next-safe": "^3.5.0",
