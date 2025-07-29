@@ -1,7 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { BroadcastChannel } from 'broadcast-channel';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { flushSync } from 'react-dom';
@@ -23,9 +22,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<LoginResponse['user'] | null>(null);
   const [lastActivity, setLastActivity] = useState(Date.now());
   const router = useRouter();
-  const bc = typeof window !== 'undefined' ? new BroadcastChannel('auth') : null;
+
+  const bcRef = useRef<BroadcastChannel | null>(null);
 
   const INACTIVITY_TIMEOUT = 1000 * 60 * 60 * 48; // 48 hours
+
+  // Initialize BroadcastChannel
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      bcRef.current = new BroadcastChannel('auth');
+
+      bcRef.current.onmessage = (event: MessageEvent) => {
+        const msg = event.data;
+
+        if (msg === 'logout') {
+          sessionStorage.removeItem('accessToken');
+          setAccessToken(null);
+          setApiClientToken(null);
+        }
+
+        if (typeof msg === 'string' && msg.startsWith('login:')) {
+          const [, token] = msg.split(':');
+          sessionStorage.setItem('accessToken', token);
+          setAccessToken(token);
+          setApiClientToken(token);
+        }
+      };
+
+      return () => {
+        bcRef.current?.close();
+        bcRef.current = null;
+      };
+    }
+  }, []);
 
   // On mount: load or try silent refresh
   useEffect(() => {
@@ -34,12 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAccessToken(token);
       setApiClientToken(token);
     } else {
-      // अगर पहले से कोई token नहीं है, तो cookie से नया लें
       refresh();
     }
   }, []);
 
-  // जब accessToken बदलें, तब user फ़ेच करें
+  // When accessToken changes, fetch user
   useEffect(() => {
     if (accessToken) {
       sessionStorage.setItem('accessToken', accessToken);
@@ -49,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           headers: { Authorization: `Bearer ${accessToken}` },
           withCredentials: true,
         })
-        .then(res => setUser(res.data))
+        .then((res) => setUser(res.data))
         .catch(() => setUser(null));
     } else {
       sessionStorage.removeItem('accessToken');
@@ -57,31 +85,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [accessToken]);
 
-  // BroadcastChannel for multi-tab sync
-  useEffect(() => {
-    if (!bc) return;
-    bc.onmessage = msg => {
-      if (msg === 'logout') {
-        sessionStorage.removeItem('accessToken');
-        setAccessToken(null);
-        setApiClientToken(null);
-      }
-      if (typeof msg === 'string' && msg.startsWith('login:')) {
-        const [, token] = msg.split(':');
-        sessionStorage.setItem('accessToken', token);
-        setAccessToken(token);
-        setApiClientToken(token);
-      }
-    };
-    return () => { bc.close(); };
-  }, [bc]);
-
-  // 48h inactivity logout (check every minute)
+  // 48h inactivity logout (event-based)
   useEffect(() => {
     if (!accessToken) return;
+
     const updateActivity = () => setLastActivity(Date.now());
-    const events = ['mousedown','mousemove','keypress','scroll','touchstart'];
-    events.forEach(e => document.addEventListener(e, updateActivity, true));
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach((e) => document.addEventListener(e, updateActivity, true));
 
     const interval = setInterval(() => {
       if (Date.now() - lastActivity > INACTIVITY_TIMEOUT) {
@@ -90,14 +100,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 1000 * 60);
 
     return () => {
-      events.forEach(e => document.removeEventListener(e, updateActivity, true));
+      events.forEach((e) => document.removeEventListener(e, updateActivity, true));
       clearInterval(interval);
     };
-  }, [accessToken, lastActivity]);
+  }, [accessToken]); // ❗️only depends on accessToken
 
   // Auto-refresh every 14 minutes
   useEffect(() => {
-    const iv = setInterval(() => { refresh(); }, 1000 * 60 * 14);
+    const iv = setInterval(() => {
+      refresh();
+    }, 1000 * 60 * 14);
     return () => clearInterval(iv);
   }, []);
 
@@ -106,23 +118,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAccessToken(token);
     setApiClientToken(token);
     setUser(userData);
-    bc?.postMessage(`login:${token}`);
+    bcRef.current?.postMessage(`login:${token}`);
   };
 
   const logout = async () => {
     try {
-      await axios.post('/api/auth/logout', {}, {
-        withCredentials: true,
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-    } catch { /* ignore */ }
-    finally {
+      await axios.post(
+        '/api/auth/logout',
+        {},
+        {
+          withCredentials: true,
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+    } catch {
+      // Ignore error
+    } finally {
       sessionStorage.removeItem('accessToken');
       setAccessToken(null);
       setUser(null);
       setApiClientToken(null);
-      bc?.postMessage('logout');
-      flushSync(() => {}); 
+      bcRef.current?.postMessage('logout');
+      flushSync(() => {});
       router.push('/auth/login');
     }
   };

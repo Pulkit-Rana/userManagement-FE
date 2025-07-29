@@ -6,7 +6,7 @@ const PUBLIC_PATHS = [
   '/', '/login', '/auth/login',
   '/api/auth/login',
   '/api/auth/logout',
-  '/api/auth/refresh',      // <-- अब यही एन्डपॉइंट
+  '/api/auth/refresh',
   '/api/auth/me',
   '/_next', '/favicon.ico', '/robots.txt',
 ];
@@ -38,10 +38,24 @@ async function attemptRefresh(req: NextRequest, retries = 0): Promise<NextRespon
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Prevent logged-in users from seeing login page
+  if (pathname === '/auth/login' || pathname === '/login') {
+    const cookie = request.cookies.get('refreshToken')?.value;
+    if (cookie) {
+      const refreshed = await attemptRefresh(request);
+      if (refreshed) {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    }
+    return NextResponse.next();
+  }
+
+  // Allow public paths
   if (PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith(path))) {
     return NextResponse.next();
   }
 
+  // Protect other routes
   const authHeader = request.headers.get('authorization') ?? '';
   const token = authHeader.split(' ')[1] || null;
 
@@ -58,6 +72,7 @@ export async function middleware(request: NextRequest) {
     if (refreshed) return refreshed;
   }
 
+  // Not authenticated → login
   return NextResponse.redirect(new URL('/auth/login', request.url));
 }
 

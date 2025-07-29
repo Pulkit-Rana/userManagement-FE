@@ -1,34 +1,32 @@
+// app/layout.tsx
 import '@/app/global.css';
-import { ThemeProvider } from '@/app/ui/components/theme-provider';
-import { AuthProvider } from './context/AuthContext';
-import { ThemeToggle } from './ui/components/theme-toggle';
-import { Toaster } from "@/app/ui/components/sonner";
-import { ClientOnly } from './ui/components/client-only';
+import { ReactNode } from 'react';
+import { Providers } from '@/app/ui/components/providers';
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const metadata = {
+  title: 'Veersa Nest',
+  description: 'AI agent that logs bugs, stories and queries ADO via natural language.',
+  openGraph: {
+    title: 'Veersa Nest',
+    url: 'https://your-app.com',
+    siteName: 'Pulkit AI Agent',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Veersa Nest',
+    description: 'Automate DevOps with LangGraph and Qdrant.',
+  },
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <ClientOnly>
-          <Toaster richColors position="top-right" />
-        </ClientOnly>
-
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <div className="fixed top-4 right-4 z-50">
-            <ClientOnly>
-              <ThemeToggle />
-            </ClientOnly>
-          </div>
-
-          <AuthProvider>
-            <main>{children}</main>
-          </AuthProvider>
-        </ThemeProvider>
+        <Providers>
+          <main>{children}</main>
+        </Providers>
       </body>
     </html>
   );

@@ -1,27 +1,48 @@
+// lib/utils/error-handler.ts
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
-export function handleError(error: any) {
-  // Zod validation errors -> 400 Bad Request
+export function handleError(error: unknown) {
+  console.error('[handleError]', error);
+
+  // ✅ Zod validation error → 400
   if (error instanceof ZodError) {
+    const messages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
     return NextResponse.json(
-      { error: error.errors.map((e) => ({ path: e.path, message: e.message })) },
+      {
+        message: 'Validation failed',
+        details: messages,
+      },
       { status: 400 }
     );
   }
 
-  // Authentication errors -> 401 Unauthorized
-  const message = error.message || 'Unauthorized';
+  const message = (typeof error === 'object' && error && 'message' in error)
+    ? (error as any).message
+    : 'Unexpected error occurred';
+
+  // ✅ Auth-related → 401
   if (
     message === 'Invalid credentials' ||
     message === 'No Authorization header' ||
     message === 'No refresh token' ||
     message === 'Refresh failed'
   ) {
-    return NextResponse.json({ error: message }, { status: 401 });
+    return NextResponse.json({ message }, { status: 401 });
   }
 
-  // Fallback -> 500 Internal Server Error
-  console.error('[Error]', error);
-  return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  // ✅ Optional: other known app errors (403, 404, 422, etc)
+  if (message === 'Forbidden') {
+    return NextResponse.json({ message }, { status: 403 });
+  }
+
+  if (message === 'Not Found') {
+    return NextResponse.json({ message }, { status: 404 });
+  }
+
+  // ✅ Fallback → 500
+  return NextResponse.json(
+    { message: 'Internal Server Error', details: message },
+    { status: 500 }
+  );
 }

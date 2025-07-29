@@ -18,7 +18,7 @@ export default function SideNav() {
 
   return (
     <nav className="h-full bg-card border-r border-border flex flex-col p-4">
-      <h2 className="text-lg font-semibold mb-6 px-2">SyncNest</h2>
+      <h2 className="text-lg font-semibold mb-6 px-2">V-Nest</h2>
 
       <div className="flex flex-1 flex-col justify-between">
         <div className="flex flex-col space-y-2">
