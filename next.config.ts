@@ -1,7 +1,10 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  // any other valid options you are using
-};
+import type { NextConfig } from "next"
 
-export default nextConfig;
+const nextConfig: NextConfig = {
+  reactStrictMode: true,
+  images: {
+    domains: ["images.unsplash.com", "undraw.io"]
+  }
+}
+
+export default nextConfig

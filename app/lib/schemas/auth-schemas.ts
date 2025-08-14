@@ -1,52 +1,91 @@
-// File: /app/lib/schemas/auth-schemas.ts
+// auth-schemas.ts
 import { z } from "zod";
 
-// --- Profile (shared by /users/me and login.user.profile) ---
+/** Profile: BE DTO ke sab fields optional/nullable ho sakte hain */
 export const ProfileSchema = z.object({
-  firstName: z.string(),
-  lastName: z.string(),
-  profilePictureUrl: z.string().url(),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  profilePictureUrl: z.string().url().nullable().optional(),
+  phoneNumber: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  zipCode: z.string().nullable().optional(),
+  lastLoginDate: z.string().nullable().optional(), // ISO string agar bhej rahe ho
 });
-export type Profile = z.infer<typeof ProfileSchema>;
+export type Profile = z.output<typeof ProfileSchema>;
 
-// --- User (returned in login + GET /users/me) ---
+/** Roles: backend Set<String> bhej raha hai → future-safe */
+const RolesArraySchema = z.array(z.string().min(1));
+
+/** User: BE me username hai; FE components me bhi use ho raha */
 export const UserSchema = z.object({
   id: z.string().uuid(),
-  roles: z.array(z.enum(["ADMIN", "USER"])),
-  profile: ProfileSchema,
+  username: z.string().email(),
+  roles: RolesArraySchema,
+  profile: ProfileSchema.nullable().optional(),
 });
-export type User = z.infer<typeof UserSchema>;
+export type User = z.output<typeof UserSchema>;
 
-// --- POST /api/auth/login response ---
 export const LoginResponseSchema = z.object({
-  accessToken: z.string(),
+  accessToken: z.string().min(1),
   refreshToken: z.string().nullable().optional(),
   expiresIn: z.number(),
-  tokenType: z.string(),
+  tokenType: z.string().min(1),
   user: UserSchema,
 });
-export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+export type LoginResponse = z.output<typeof LoginResponseSchema>;
 
-// --- POST /api/auth/refreshToken response ---
 export const RefreshResponseSchema = z.object({
-  accessToken: z.string(),
+  accessToken: z.string().min(1),
   refreshToken: z.string().nullable().optional(),
 });
-export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;
+export type RefreshResponse = z.output<typeof RefreshResponseSchema>;
 
-// --- POST /api/auth/logout response ---
 export const LogoutResponseSchema = z.object({
   message: z.string(),
 });
-export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
+export type LogoutResponse = z.output<typeof LogoutResponseSchema>;
 
-// --- GET /api/users/me response (same as UserSchema) ---
 export const GetCurrentUserResponseSchema = UserSchema;
-export type GetCurrentUserResponse = User;
+export type GetCurrentUserResponse = z.output<typeof UserSchema>;
 
-// --- POST /api/auth/login request body ---
+/** Login request: BE = min 8 */
 export const LoginRequestSchema = z.object({
-  email: z.string().email(), // frontend field
-  password: z.string().min(6),
+  username: z.string().email(),
+  password: z.string().min(8),
 });
-export type LoginRequest = z.infer<typeof LoginRequestSchema>;
+export type LoginRequest = z.output<typeof LoginRequestSchema>;
+
+/** Optional: normalize helper taaki UI components me profile hamesha same shape rahe */
+export type NormalizedProfile = {
+  firstName: string;
+  lastName: string;
+  profilePictureUrl: string;
+  phoneNumber: string;
+  address: string;
+  city: string;
+  country: string;
+  zipCode: string;
+  lastLoginDate: string;
+};
+
+export type NormalizedUser = Omit<User, "profile"> & { profile: NormalizedProfile };
+
+export function normalizeUser(u: User): NormalizedUser {
+  const p = u.profile ?? {};
+  return {
+    ...u,
+    profile: {
+      firstName: p.firstName ?? "",
+      lastName: p.lastName ?? "",
+      profilePictureUrl: p.profilePictureUrl ?? "",
+      phoneNumber: p.phoneNumber ?? "",
+      address: p.address ?? "",
+      city: p.city ?? "",
+      country: p.country ?? "",
+      zipCode: p.zipCode ?? "",
+      lastLoginDate: p.lastLoginDate ?? "",
+    },
+  };
+}
